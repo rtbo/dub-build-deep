@@ -13,7 +13,7 @@ DUB dependencies and sub-dependencies to be already available during the `meson 
 
 ```txt
 $ dub-build-deep -h
-dub-build-deep v1.0.0 - An utility to build DUB sub-dependencies
+dub-build-deep v1.0.1 - An utility to build DUB sub-dependencies
 
 Usage:
     dub-build-deep [options] (package name)[@version]
