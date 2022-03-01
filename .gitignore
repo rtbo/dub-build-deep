@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/dub-build-deep
+dub-build-deep.so
+dub-build-deep.dylib
+dub-build-deep.dll
+dub-build-deep.a
+dub-build-deep.lib
+dub-build-deep-test-*
+*.exe
+*.o
+*.obj
+*.lst

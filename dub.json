@@ -1,0 +1,9 @@
+{
+	"name": "dub-build-deep",
+	"description": "An utility to build a dub library and all its dependencies",
+	"authors": [
+		"Rémi Thebault"
+	],
+	"copyright": "Copyright © 2022, Rémi Thebault",
+	"license": "MIT"
+}
