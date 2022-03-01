@@ -107,7 +107,7 @@ int main(string[] args)
     dub.exe = "dub";
 
     auto helpInfo = getopt(args,
-        "config", "Specificy a DUB configuration", &pack.config,
+        "config", "Specify a DUB configuration", &pack.config,
         "override-config", "Specify a DUB configuration for a sub-dependency", &pack.overrideConfig,
         "dub", "Specify a DUB executable", &dub.exe,
         "compiler", "D compiler to be used", &dub.compiler,

@@ -20,7 +20,7 @@ Usage:
 
 Most options are the same than expected by DUB describe.
 
-            --config Specificy a DUB configuration
+            --config Specify a DUB configuration
    --override-config Specify a DUB configuration for a sub-dependency
                --dub Specify a DUB executable
           --compiler D compiler to be used
