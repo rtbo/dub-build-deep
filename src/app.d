@@ -1,5 +1,6 @@
 module app;
 
+import std.algorithm;
 import std.array;
 import std.getopt;
 import std.json;
@@ -32,7 +33,22 @@ struct DubConfig
     string arch;
     string build;
 
-    string[] makeCmd(string cmdName, Pack pack)
+    string[] makeDescribeCmd(Pack pack)
+    {
+        return makeComplexCmd("describe", pack);
+    }
+
+    string[] makeBuildCmd(Pack pack)
+    {
+        return makeComplexCmd("build", pack);
+    }
+
+    string[] makeFetchCmd(Pack pack)
+    {
+        return [exe, "fetch", pack.dubId];
+    }
+
+    string[] makeComplexCmd(string cmdName, Pack pack)
     {
         auto cmd = [
             exe, cmdName, pack.dubId
@@ -54,6 +70,7 @@ struct DubConfig
 
         return cmd;
     }
+
 }
 
 int usage(string dbdExe, Option[] opts, int code = 0, string errorMsg = null)
@@ -91,7 +108,7 @@ int main(string[] args)
 
     auto helpInfo = getopt(args,
         "config", "Specificy a DUB configuration", &pack.config,
-        "override-config", "Specify a DUB configuration for sub-dependencie", &pack.overrideConfig,
+        "override-config", "Specify a DUB configuration for a sub-dependency", &pack.overrideConfig,
         "dub", "Specify a DUB executable", &dub.exe,
         "compiler", "D compiler to be used", &dub.compiler,
         "arch", "Architecture to target", &dub.arch,
@@ -125,14 +142,32 @@ int main(string[] args)
         pack.ver = spec[1];
     }
 
-    const describeCmd = dub.makeCmd("describe", pack);
+    const describeCmd = dub.makeDescribeCmd(pack);
 
     writeln("running ", escapeShellCommand(describeCmd));
     auto describe = execute(describeCmd);
 
+    if (describe.status != 0 && describe.output.canFind("locally"))
+    {
+        writefln("Warning: %s does not appear to be present locally. Will try to fetch...", pack.dubId);
+        const fetchCmd = dub.makeFetchCmd(pack);
+        writefln("running %s", escapeShellCommand(fetchCmd));
+        auto fetch = execute(fetchCmd);
+        if (fetch.status != 0)
+        {
+            stderr.writefln("Error: `dub fetch` returned %s:", fetch.status);
+            stderr.writeln(fetch.output);
+            return fetch.status;
+        }
+
+        writeln("running ", escapeShellCommand(describeCmd));
+        describe = execute(describeCmd);
+    }
+
+
     if (describe.status != 0)
     {
-        stderr.writeln("Error: describe command returned ", describe.status);
+        stderr.writeln("Error: describe command returned %s:", describe.status);
         stderr.writeln(describe.output);
         return describe.status;
     }
@@ -164,7 +199,7 @@ int main(string[] args)
 
 int buildDubPackage(Pack pack, DubConfig dub)
 {
-    const buildCmd = dub.makeCmd("build", pack);
+    const buildCmd = dub.makeBuildCmd(pack);
     writeln("running ", escapeShellCommand(buildCmd));
     auto res = execute(buildCmd);
     if (res.status != 0)
