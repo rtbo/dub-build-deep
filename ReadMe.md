@@ -36,7 +36,7 @@ Most options are the same than expected by DUB describe.
 - Dub configuration `notls` is specified for the subpackage `vibe-d:tls`
 
 ```txt
-$ dub run dub-build-deep -- --override-config vibe-d:tls/notls --compiler dmd --arch x86_64 --build release vibe-d:http`
+$ dub run dub-build-deep -- --override-config vibe-d:tls/notls --compiler dmd --arch x86_64 --build release vibe-d:http@0.9.4`
 [...]
 running "dub" describe ^"vibe-d:http@0.9.4^" --override-config vibe-d:tls/notls --compiler dmd --arch ^"x86_64^" --build release
 Warning: vibe-d:http@0.9.4 does not appear to be present locally. Will try to fetch and repeat...
