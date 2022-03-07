@@ -176,8 +176,16 @@ int main(string[] args)
 
     foreach (jp; json["packages"].array)
     {
-        if (!jp["active"].boolean)
-            continue;
+        version(GNU)
+        {
+            if (!jp["active"].type == JSON_TYPE.TRUE)
+                continue;
+        }
+        else
+        {
+            if (!jp["active"].boolean)
+                continue;
+        }
 
         const targetType = jp["targetType"].str;
         if (targetType == "none" || targetType == "sourceLibrary")
