@@ -7,7 +7,7 @@ import std.json;
 import std.process;
 import std.stdio;
 
-enum dbdVersion = "1.0.2";
+enum appVersion = "1.0.2";
 
 struct Pack
 {
@@ -85,7 +85,7 @@ int usage(string dbdExe, Option[] opts, int code = 0, string errorMsg = null)
 
     if (code == 0)
     {
-        file.writefln("dub-build-deep v%s - An utility to build DUB sub-dependencies", dbdVersion);
+        file.writefln("dub-build-deep v%s - An utility to build DUB sub-dependencies", appVersion);
         file.writefln("");
     }
 
