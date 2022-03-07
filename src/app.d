@@ -7,7 +7,7 @@ import std.json;
 import std.process;
 import std.stdio;
 
-enum dbdVersion = "1.0.1";
+enum dbdVersion = "1.0.2";
 
 struct Pack
 {
