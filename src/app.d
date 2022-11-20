@@ -6,6 +6,7 @@ import std.getopt;
 import std.json;
 import std.process;
 import std.stdio;
+import std.typecons;
 
 enum appVersion = "1.0.2";
 
@@ -116,19 +117,13 @@ int main(string[] args)
     );
 
     if (helpInfo.helpWanted)
-    {
         return usage(args[0], helpInfo.options);
-    }
 
     if (args.length < 2)
-    {
         return usage(args[0], helpInfo.options, 1, "(package name] was not provided");
-    }
 
     if (args.length > 2)
-    {
         return usage(args[0], helpInfo.options, 1, "Too many arguments (only one package accepted)");
-    }
 
     const spec = args[1].split("@");
     if (spec.length > 2)
@@ -138,37 +133,34 @@ int main(string[] args)
     }
     pack.name = spec[0];
     if (spec.length == 2)
-    {
         pack.ver = spec[1];
-    }
 
     const describeCmd = dub.makeDescribeCmd(pack);
 
     writeln("running ", escapeShellCommand(describeCmd));
-    auto describe = execute(describeCmd);
+    auto describe = executeSplit(describeCmd);
 
-    if (describe.status != 0 && describe.output.canFind("locally"))
+    if (describe.status != 0 && describe.error.canFind("locally"))
     {
-        writefln("Warning: %s does not appear to be present locally. Will try to fetch...", pack.dubId);
+        writefln("Warning: %s does not appear to be present locally. Will try to fetch...", pack
+                .dubId);
         const fetchCmd = dub.makeFetchCmd(pack);
         writefln("running %s", escapeShellCommand(fetchCmd));
-        auto fetch = execute(fetchCmd);
+        auto fetch = executeStderr(fetchCmd);
         if (fetch.status != 0)
         {
             stderr.writefln("Error: `dub fetch` returned %s:", fetch.status);
-            stderr.writeln(fetch.output);
+            stderr.writeln(fetch.error);
             return fetch.status;
         }
 
         writeln("running ", escapeShellCommand(describeCmd));
-        describe = execute(describeCmd);
+        describe = executeStdout(describeCmd);
     }
-
 
     if (describe.status != 0)
     {
         stderr.writeln("Error: describe command returned %s:", describe.status);
-        stderr.writeln(describe.output);
         return describe.status;
     }
 
@@ -176,15 +168,15 @@ int main(string[] args)
 
     foreach (jp; json["packages"].array)
     {
-        version(GNU)
+        version (GNU)
         {
             if (!jp["active"].type == JSON_TYPE.TRUE)
-                continue;
+            continue;
         }
         else
         {
             if (!jp["active"].boolean)
-                continue;
+            continue;
         }
 
         const targetType = jp["targetType"].str;
@@ -215,4 +207,43 @@ int buildDubPackage(Pack pack, DubConfig dub)
         stderr.writeln(res.output);
     }
     return res.status;
+}
+
+alias ExeResult = Tuple!(int, "status", string, "output", string, "error");
+
+ExeResult executeStdout(scope const(char[])[] cmd)
+{
+    return executeRedirect(cmd, Redirect.stdout);
+}
+
+ExeResult executeStderr(scope const(char[])[] cmd)
+{
+    return executeRedirect(cmd, Redirect.stderr);
+}
+
+ExeResult executeSplit(scope const(char[])[] cmd)
+{
+    return executeRedirect(cmd, Redirect.stdout | Redirect.stderr);
+}
+
+ExeResult executeRedirect(scope const(char[])[] cmd, Redirect redirect)
+{
+    auto pipes = pipeProcess(cmd, redirect);
+
+    auto output = appender!string();
+    auto error = appender!string();
+
+    if (redirect & Redirect.stdout)
+    {
+        foreach (ubyte[] chunk; pipes.stdout.byChunk(8192))
+            output.put(chunk);
+    }
+
+    if (redirect & Redirect.stderr)
+    {
+        foreach (ubyte[] chunk; pipes.stderr.byChunk(8192))
+            error.put(chunk);
+    }
+
+    return ExeResult(wait(pipes.pid), output.data, error.data);
 }
