@@ -160,7 +160,7 @@ int main(string[] args)
 
     if (describe.status != 0)
     {
-        stderr.writeln("Error: describe command returned %s:", describe.status);
+        stderr.writefln("Error: describe command returned %s:", describe.status);
         return describe.status;
     }
 
