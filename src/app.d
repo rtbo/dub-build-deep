@@ -100,6 +100,32 @@ int usage(string dbdExe, Option[] opts, int code = 0, string errorMsg = null)
     return code;
 }
 
+bool debug_;
+bool quiet;
+
+void logDebug(Args...)(string fmt, Args args)
+{
+    if (debug_)
+        stdout.writefln(fmt, args);
+}
+
+void logInfo(Args...)(string fmt, Args args)
+{
+    if (!quiet)
+        stdout.writefln(fmt, args);
+}
+
+void logWarning(Args...)(string fmt, Args args)
+{
+    if (!quiet)
+        stderr.writefln("Warning: " ~ fmt, args);
+}
+
+void logError(Args...)(string fmt, Args args)
+{
+    stderr.writefln("Error: " ~ fmt, args);
+}
+
 int main(string[] args)
 {
     Pack pack;
@@ -107,6 +133,7 @@ int main(string[] args)
     DubConfig dub;
     dub.exe = "dub";
 
+    // dfmt off
     auto helpInfo = getopt(args,
         "config", "Specify a DUB configuration", &pack.config,
         "override-config", "Specify a DUB configuration for a sub-dependency", &pack.overrideConfig,
@@ -114,7 +141,10 @@ int main(string[] args)
         "compiler", "D compiler to be used", &dub.compiler,
         "arch", "Architecture to target", &dub.arch,
         "build", "The build type (debug, release, ...)", &dub.build,
+        "debug", "Add debug output (all commands output streams)", &debug_,
+        "quiet", "Decrease verbosity", &quiet,
     );
+    // dfmt on
 
     if (helpInfo.helpWanted)
         return usage(args[0], helpInfo.options);
@@ -128,7 +158,7 @@ int main(string[] args)
     const spec = args[1].split("@");
     if (spec.length > 2)
     {
-        stderr.writeln("Invalid package specifier: ", args[1]);
+        logError("Invalid package specifier: %s", args[1]);
         return 1;
     }
     pack.name = spec[0];
@@ -137,32 +167,24 @@ int main(string[] args)
 
     const describeCmd = dub.makeDescribeCmd(pack);
 
-    writeln("running ", escapeShellCommand(describeCmd));
-    auto describe = executeSplit(describeCmd);
+    logInfo("Getting description of %s", pack.dubId);
+    auto describe = executeRedirect(describeCmd, Yes.allowFail);
 
     if (describe.status != 0 && describe.error.canFind("locally"))
     {
-        writefln("Warning: %s does not appear to be present locally. Will try to fetch...", pack
-                .dubId);
+        logWarning("%s does not appear to be present locally.", pack.dubId);
+        logInfo("Fetching %s", pack.dubId);
         const fetchCmd = dub.makeFetchCmd(pack);
-        writefln("running %s", escapeShellCommand(fetchCmd));
-        auto fetch = executeStderr(fetchCmd);
+        auto fetch = executeRedirect(fetchCmd, No.allowFail);
         if (fetch.status != 0)
-        {
-            stderr.writefln("Error: `dub fetch` returned %s:", fetch.status);
-            stderr.writeln(fetch.error);
             return fetch.status;
-        }
 
-        writeln("running ", escapeShellCommand(describeCmd));
-        describe = executeStdout(describeCmd);
+        logInfo("Getting description of %s", pack.dubId);
+        describe = executeRedirect(describeCmd, No.allowFail);
     }
 
     if (describe.status != 0)
-    {
-        stderr.writefln("Error: describe command returned %s:", describe.status);
         return describe.status;
-    }
 
     auto json = parseJSON(describe.output);
 
@@ -200,50 +222,72 @@ int main(string[] args)
 int buildDubPackage(Pack pack, DubConfig dub)
 {
     const buildCmd = dub.makeBuildCmd(pack);
-    writeln("running ", escapeShellCommand(buildCmd));
-    auto res = execute(buildCmd);
-    if (res.status != 0)
-    {
-        stderr.writeln(res.output);
-    }
+    logInfo("Building %s@%s (config %s)", pack.name, pack.ver, pack.config);
+    auto res = executeRedirect(buildCmd, No.allowFail);
     return res.status;
 }
 
 alias ExeResult = Tuple!(int, "status", string, "output", string, "error");
 
-ExeResult executeStdout(scope const(char[])[] cmd)
+ExeResult executeRedirect(scope const(char[])[] cmd, Flag!"allowFail" allowFail)
 {
-    return executeRedirect(cmd, Redirect.stdout);
-}
+    if (debug_)
+        stdout.writefln("=== running `%s`", cmd.map!escapeSpace.join(" "));
 
-ExeResult executeStderr(scope const(char[])[] cmd)
-{
-    return executeRedirect(cmd, Redirect.stderr);
-}
-
-ExeResult executeSplit(scope const(char[])[] cmd)
-{
-    return executeRedirect(cmd, Redirect.stdout | Redirect.stderr);
-}
-
-ExeResult executeRedirect(scope const(char[])[] cmd, Redirect redirect)
-{
-    auto pipes = pipeProcess(cmd, redirect);
+    auto pipes = pipeProcess(cmd);
 
     auto output = appender!string();
     auto error = appender!string();
 
-    if (redirect & Redirect.stdout)
+    foreach (ubyte[] chunk; pipes.stdout.byChunk(8192))
+        output.put(chunk);
+    foreach (ubyte[] chunk; pipes.stderr.byChunk(8192))
+        error.put(chunk);
+
+    int status = wait(pipes.pid);
+
+    // exhaust if needed
+    foreach (ubyte[] chunk; pipes.stdout.byChunk(8192))
+        output.put(chunk);
+    foreach (ubyte[] chunk; pipes.stderr.byChunk(8192))
+        error.put(chunk);
+
+    string outp = output.data;
+    string err = error.data;
+
+    if (allowFail || status == 0)
     {
-        foreach (ubyte[] chunk; pipes.stdout.byChunk(8192))
-            output.put(chunk);
+        if (debug_)
+        {
+            stdout.writefln("=== status: %s", status);
+            stdout.writeln("=== stdout:");
+            stdout.write(outp);
+            stdout.writeln("=== stderr:");
+            stdout.write(err);
+            stdout.writeln("===========");
+        }
+    }
+    else
+    {
+        stderr.writefln("Error: Command failed: %s", cmd.map!escapeSpace.join(" "));
+        stderr.writefln("=== status: %s", status);
+        if (debug_)
+        {
+            stderr.writeln("=== stdout:");
+            stderr.write(outp);
+        }
+        stderr.writefln("=== stderr:");
+        stderr.write(err);
+        stderr.writefln("===========");
     }
 
-    if (redirect & Redirect.stderr)
-    {
-        foreach (ubyte[] chunk; pipes.stderr.byChunk(8192))
-            error.put(chunk);
-    }
+    return ExeResult(status, outp, err);
+}
 
-    return ExeResult(wait(pipes.pid), output.data, error.data);
+// escape space in a shell argument (only worth for debug print, not actual execution)
+const(char)[] escapeSpace(const(char)[] arg)
+{
+    if (arg.canFind(" "))
+        return `"` ~ arg ~ `"`;
+    return arg;
 }
